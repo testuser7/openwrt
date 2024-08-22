@@ -27,8 +27,8 @@ Signed-off-by: Qiyuan Zhang <zhang.github@outlook.com>
 +	const char *exact_match;
 +	const int bootargs_replace_num = 2;
 +	const char *bootargs_replace_props[2][3] =
-+            { {"bootargs-find-1", "bootargs-replace-1", "bootargs-exact-match-1"},
-+              {"bootargs-find-2", "bootargs-replace-2", "bootargs-exact-match-2"} };
++		{ {"bootargs-find-1", "bootargs-replace-1", "bootargs-exact-match-1"},
++		{"bootargs-find-2", "bootargs-replace-2", "bootargs-exact-match-2"} };
 +
  	node = fdt_path_offset(fdt, "/chosen");
  	if (node < 0)
