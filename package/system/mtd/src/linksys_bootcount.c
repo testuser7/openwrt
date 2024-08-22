@@ -119,7 +119,7 @@ int mtd_resetbc(const char *mtd)
 		ret = pread(fd, curr, sizeof(struct bootcounter), i * bc_offset_increment);
 
 		if(ret != sizeof(struct bootcounter)) {
-			DLOG_ERR("Failed to read boot-count log at offset %08x.", i * bc_offset_increment);
+			DLOG_ERR("Failed to read boot-count log at offset 0x%08x.", i * bc_offset_increment);
 
 			retval = -5;
 			goto out;
@@ -130,7 +130,7 @@ int mtd_resetbc(const char *mtd)
 			break;
 
 		if (curr->magic != BOOTCOUNT_MAGIC || curr->checksum != curr->magic + curr->count) {
-			DLOG_ERR("Unexpected boot-count log at offset %08x: magic %08x boot count %08x checksum %08x; aborting.",
+			DLOG_ERR("Unexpected boot-count log at offset 0x%08x: magic 0x%08x boot count 0x%08x checksum 0x%08x; aborting.",
 				 i * bc_offset_increment, curr->magic, curr->count, curr->checksum);
 
 			retval = -2;
