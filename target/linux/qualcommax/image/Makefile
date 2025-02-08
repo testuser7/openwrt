@@ -1,5 +1,6 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
+include glinet-image.mk
 
 define Build/qsdk-ipq-factory-nand-glinet
 	./gen_$(BOOT_SCRIPT)_bootscript.sh $@

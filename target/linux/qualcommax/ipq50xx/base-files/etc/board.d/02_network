@@ -7,6 +7,9 @@ ipq50xx_setup_interfaces()
 {
 	local board="$1"
 	case $board in
+		glinet,gl-b3000)
+			ucidef_set_interfaces_lan_wan "lan1 lan2" "wan"
+			;;
 		linksys,mx2000|\
 		linksys,mx5500)
 			ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"
@@ -22,6 +25,11 @@ ipq50xx_setup_macs()
 	local label_mac=""
 
 	case "$board" in
+		glinet,gl-b3000)
+			label_mac=$(get_mac_label_dt)
+			lan_mac=$(macaddr_add $label_mac 2)
+			ucidef_set_network_device_mac eth0 $label_mac
+		;;
 		linksys,mx2000|\
 		linksys,mx5500)
 			label_mac=$(mtd_get_mac_ascii devinfo hw_mac_addr)

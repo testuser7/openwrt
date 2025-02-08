@@ -1,0 +1,26 @@
+/dts-v1/;
+
+/ {
+        description = "Flashing nand 800 20000";
+        #address-cells = <1>;
+        images {
+                script {
+                        description = "flash.scr";
+                        data = /incbin/("flash.scr");
+                        type = "Script";
+                        arch = "arm64";
+                        compression = "none";
+                        hash@1 { algo = "crc32"; };
+                };
+                           
+                ubi {
+                        description = "gl-b3000-root.img";
+                        data = /incbin/("openwrt-qualcommax-ipq50xx-glinet_gl-b3000-squashfs-nand-factory.img");
+                        type = "Firmware";
+                        arch = "arm64";
+                        compression = "none";
+                        hash@1 { algo = "crc32"; };
+                };      
+        };
+};
+
