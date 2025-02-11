@@ -1,0 +1,195 @@
+name: Build cache
+
+on: workflow_dispatch
+
+jobs:
+  build-cache:
+    name: Build target cache
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache_base
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
+        target: [qualcommax, mediatek, x86]
+        version: [main]
+        exclude:
+          - os: ubuntu-26.04
+            target: qualcommax
+            version: main
+          - os: ubuntu-26.04
+            target: mediatek
+            version: main
+          - os: ubuntu-26.04-arm
+            target: x86
+            version: main
+        include:
+          - os: ubuntu-26.04
+            packages: >
+              gawk
+              glibc-source
+          - os: ubuntu-26.04-arm
+            packages: >
+              gawk
+              glibc-source
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.target }}_${{ matrix.version }}
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - name: Start Workflow Telemetry
+        uses: dev-hato/actions-workflow-metrics@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          interval_seconds: "30"
+
+      - name: Install packages
+        uses: gerlero/apt-install@v1
+        with:
+          install-recommends: false
+          packages: ${{ matrix.packages }}
+
+      - name: Restore cache
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ matrix.target }}_${{ matrix.version }}
+          key: cache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}
+
+      - name: Ccache stats clear
+        if: steps.cache-restore.outputs.cache-hit && steps.ccache-restore.outputs.cache-hit
+        run: staging_dir/host/bin/ccache -z
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          path: ${{ matrix.target }}_${{ matrix.version }}
+          clean: false
+
+      - name: Get SHA
+        uses: benjlevesque/short-sha@v4.0
+
+      - name: Update feeds
+        run: make package/symlinks
+
+      - name: Makefiles node rust
+        run: |
+          cp node/Makefile feeds/packages/lang/node/Makefile
+          cp rust/Config.in feeds/packages/lang/rust/Config.in
+          cp rust/Makefile feeds/packages/lang/rust/Makefile
+          cp rust/rust-values.mk feeds/packages/lang/rust/rust-values.mk
+
+      - name: Import config
+        run: mv .config_${{ matrix.target }}_${{ matrix.version }} .config
+
+      - name: Update config
+        run: make defconfig
+
+      - name: Prepare build
+        id: prepare-build
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) download tools/compile toolchain/compile
+
+      #- name: Check dir
+      #  run: |
+      #    ls -laR build_dir
+      #    cat feeds/packages/lang/rust/Makefile
+      #    cat feeds/packages/lang/rust/rust-values.mk
+
+      - name: Build Node
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) package/node/host/clean package/node/host/compile V=sc
+
+      - name: Build Rust
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) package/rust/host/clean package/rust/host/compile V=sc
+
+      - name: Ccache stats
+        run: staging_dir/host/bin/ccache -s
+
+      - name: Delete old ccache
+        if: (success() || failure()) && steps.ccache-restore.outputs.cache-hit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CACHE_SIZE=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+          CACHE_SIZE_API_2=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+          echo "Cache size ${CACHE_SIZE}/${CACHE_SIZE_API_2}."
+          gh cache delete "ccache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}"
+          START=$SECONDS
+          TIMEOUT=6000
+          while [ $(( SECONDS - START )) -lt $TIMEOUT ]; do
+            sleep 5
+            CACHE_SIZE_NEW=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+            CACHE_SIZE_API=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+            if [ "$CACHE_SIZE_NEW" -eq "$CACHE_SIZE_API" ]; then
+              ELAPSED=$(( SECONDS - START ))
+              echo "Cache size updated after ${ELAPSED}s."
+              break
+            fi
+            echo "Cache size after ${CACHE_SIZE_NEW}/${CACHE_SIZE_API}."
+          done
+
+      - name: Save ccache
+        if: success() || failure()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}
+
+      - name: Revert node changes
+        run: |
+          if [ -d feeds/packages/.git ]; then
+            git -C feeds/packages checkout HEAD -- lang/node/Makefile
+            git -C feeds/packages checkout HEAD -- lang/rust/Config.in
+            git -C feeds/packages checkout HEAD -- lang/rust/Makefile
+            git -C feeds/packages checkout HEAD -- lang/rust/rust-values.mk
+          fi
+
+      - name: Clean binaries and config
+        if: success() || failure()
+        run: |
+          du -h -d 1 .
+          du -h -d 4 build_dir
+          du -h -d 4 staging_dir
+          make config-clean
+          find build_dir/host build_dir/hostpkg build_dir/target-*/host build_dir/toolchain-* -mindepth 2 -maxdepth 2 ! -name '.configured' ! -name '.built' ! \( -name '.prepared*' ! -name '*_check' \) -exec rm -fr {} + || true
+          rm -rf tmp .config* *.pem
+
+      - name: Delete old cache
+        if: (success() || failure()) && steps.cache-restore.outputs.cache-hit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CACHE_SIZE=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+          CACHE_SIZE_API_2=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+          echo "Cache size ${CACHE_SIZE}/${CACHE_SIZE_API_2}."
+          gh cache delete "cache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}"
+          START=$SECONDS
+          TIMEOUT=6000
+          while [ $(( SECONDS - START )) -lt $TIMEOUT ]; do
+            sleep 5
+            CACHE_SIZE_NEW=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+            CACHE_SIZE_API=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+            if [ "$CACHE_SIZE_NEW" -eq "$CACHE_SIZE_API" ]; then
+              ELAPSED=$(( SECONDS - START ))
+              echo "Cache size updated after ${ELAPSED}s."
+              break
+            fi
+            echo "Cache size after ${CACHE_SIZE_NEW}/${CACHE_SIZE_API}."
+          done
+
+
+      - name: Save cache
+        if: success() || failure()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ matrix.target }}_${{ matrix.version }}
+          key: cache-${{ matrix.os }}-${{ matrix.target }}_${{ matrix.version }}
