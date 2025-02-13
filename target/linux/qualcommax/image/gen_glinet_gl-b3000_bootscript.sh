@@ -1,11 +1,12 @@
-if test "x$verbose" = "x"; then
+echo "\
+if test \"x\$verbose\" = \"x\"; then
     failedmsg='[failed]'
 else
     failedmsg='######################################## Failed'
 fi
 
-if test -n $soc_hw_version; then
-    if test "$soc_hw_version" = "20180100" || test "$soc_hw_version" = "20180101" ; then
+if test -n \$soc_hw_version; then
+    if test \"\$soc_hw_version\" = \"20180100\" || test \"\$soc_hw_version\" = \"20180101\" ; then
         echo 'soc_hw_version : Validation success'
     else
         echo 'soc_hw_version : did not match, aborting upgrade'
@@ -15,14 +16,14 @@ else
     echo 'soc_hw_version : unknown, skipping validation'
 fi
 
-if test "$machid" = "8040004" ; then
+if test \"\$machid\" = \"8040004\" ; then
     echo 'machid : Validation success'
 else
     echo 'machid : unknown, aborting upgrade'
     exit 1
 fi
 
-if test "x$verbose" = "x"; then
+if test \"x\$verbose\" = \"x\"; then
     echo \\c'Flashing ubi:                                          '
     setenv stdout nulldev
 else
@@ -30,12 +31,12 @@ else
 fi
 
 failreason='error: failed on image extraction'
-imxtract $imgaddr ubi || setenv stdout serial && echo "$failedmsg" && echo "$failreason" && exit 1
+imxtract \$imgaddr ubi || setenv stdout serial && echo \"\$failedmsg\" && echo \"\$failreason\" && exit 1
 failreason='error: failed on partition erase'
-nand device 0 && nand erase 0x00800000 0x07800000 || setenv stdout serial && echo "$failedmsg" && echo "$failreason" && exit 1
+nand device 0 && nand erase 0x00800000 0x07800000 || setenv stdout serial && echo \"\$failedmsg\" && echo \"\$failreason\" && exit 1
 failreason='error: failed on partition write'
-nand write $fileaddr 0x00800000 0x3520000 || setenv stdout serial && echo "$failedmsg" && echo "$failreason" && exit 1
-if test "x$verbose" = "x"; then
+nand write \$fileaddr 0x00800000 $(printf "0x%08x" `stat -c "%s" $@`) || setenv stdout serial && echo \"\$failedmsg\" && echo \"\$failreason\" && exit 1
+if test \"x\$verbose\" = \"x\"; then
     setenv stdout serial
     echo '[ done ]'
     setenv stdout nulldev
@@ -45,3 +46,4 @@ else
 fi
 
 exit 0
+" >> $@.bootscript

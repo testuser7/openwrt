@@ -224,10 +224,6 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-	partitions {
-		status = "disabled";
-	};
-
 	nand@0 {
     	compatible = "spi-nand";
 		reg = <0>;
@@ -241,61 +237,14 @@
 		nand-bus-width = <8>;
 
 		partitions {
-        	compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
+			compatible = "qcom,smem-part";
 
-			partition@0 {
-				label = "0:SBL1";
-				reg = <0x00000000 0x80000>;
+			partition-0-art {
+				compatible = "fixed-partitions";
+				label = "0:art";
 				read-only;
-			};
-
-			partition@80000 {
-				label = "0:MIBIB";
-				reg = <0x00080000 0x80000>;
-				read-only;
-			};
-
-			partition@100000 {
-				label = "0:BOOTCONFIG";
-				reg = <0x00100000 0x40000>;
-				read-only;
-			};
-
-			partition@140000 {
-				label = "0:QSEE";
-				reg = <0x00140000 0x100000>;
-				read-only;
-			};
-
-			partition@240000 {
-				label = "0:DEVCFG";
-				reg = <0x00240000 0x40000>;
-				read-only;
-			};
-
-			partition@280000 {
-				label = "0:CDT";
-				reg = <0x00280000 0x40000>;
-				read-only;
-			};
-
-			partition@2c0000 {
-				label = "0:APPSBLENV";
-				reg = <0x002c0000 0x80000>;
-			};
-
-			partition@340000 {
-				label = "0:APPSBL";
-				reg = <0x00340000 0x140000>;
-				read-only;
-			};
-
-			partition@480000 {
-				label = "0:ART";
-				reg = <0x00480000 0x100000>;
-				read-only;
+				#address-cells = <1>;
+				#size-cells = <1>;
 
 				nvmem-layout {
 					compatible = "fixed-layout";
@@ -306,22 +255,6 @@
 						reg = <0x0 0x6>;
 					};
 				};
-			};
-
-			partition@580000 {
-				label = "0:TRAINING";
-				reg = <0x00580000 0x80000>;
-				read-only;
-			};
-
-			partition@600000 {
-				label = "CFG";
-				reg = <0x00600000 0x200000>;
-			};
-
-			partition@800000 {
-				label = "rootfs";
-				reg = <0x00800000 0x7800000>;
 			};
 		};
 	};

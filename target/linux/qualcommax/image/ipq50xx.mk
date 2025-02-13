@@ -1,6 +1,7 @@
+DEVICE_VARS += BOOT_SCRIPT
+
 define Device/glinet_gl-b3000
  $(call Device/FitImage)
- $(call Device/UbiFit)
   SOC := ipq5018
   DEVICE_VENDOR := GL.iNET
   DEVICE_MODEL := GL-B3000
@@ -8,11 +9,10 @@ define Device/glinet_gl-b3000
   PAGESIZE := 2048
   NAND_SIZE := 128m
   DEVICE_DTS_CONFIG := config@mp03.5-c1
-  SUPPORTED_DEVICES:=glinet,gl-b3000 b3000
-  UBINIZE_OPTS := -E 5
-  IMAGES := nand-sysupgrade.bin  nand-factory.img
-  IMAGE/nand-factory.img := append-ubi | nand-factory img | pad-to $$(BLOCKSIZE) | append-metadata
-  IMAGE/nand-sysupgrade.bin := sysupgrade-tar | append-metadata
+  SUPPORTED_DEVICES += b3000
+  BOOT_SCRIPT := glinet_gl-b3000
+  IMAGES += factory.img
+  IMAGE/factory.img := append-ubi | qsdk-ipq-factory-nand-glinet | pad-to $$(BLOCKSIZE) | append-metadata
   DEVICE_PACKAGES := ath11k-firmware-qcn6122 ipq-wifi-glinet_gl-b3000
 endef
 TARGET_DEVICES += glinet_gl-b3000

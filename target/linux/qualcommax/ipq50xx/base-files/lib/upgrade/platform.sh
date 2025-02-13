@@ -73,7 +73,8 @@ platform_check_image() {
 platform_do_upgrade() {
 	case "$(board_name)" in
 	glinet,gl-b3000)
-		CI_UBIPART="rootfs"
+		CI_UBIPART="ubi_rootfs"
+		remove_oem_ubi_volume wifi_fw
 		nand_do_upgrade "$1"
        		;;
 	linksys,mx2000|\
