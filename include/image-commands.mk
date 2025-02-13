@@ -590,14 +590,14 @@ endef
 
 define Build/qsdk-ipq-factory-nand
 	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh \
-		$@.its ubi $@
+		$@.its ubi firmware $@
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
 	@mv $@.new $@
 endef
 
 define Build/qsdk-ipq-factory-nor
 	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh \
-		$@.its hlos $(IMAGE_KERNEL) rootfs $(IMAGE_ROOTFS)
+		$@.its hlos firmware $(IMAGE_KERNEL) rootfs firmware $(IMAGE_ROOTFS)
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
 	@mv $@.new $@
 endef
