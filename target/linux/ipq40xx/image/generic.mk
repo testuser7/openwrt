@@ -95,9 +95,9 @@ endef
 
 define Build/qsdk-ipq-factory-nand-askey
 	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh $@.its\
-		askey_kernel $@.$1 \
-		askey_fs $(IMAGE_ROOTFS) \
-		ubifs $@
+		askey_kernel firmware $@.$1 \
+		askey_fs firmware $(IMAGE_ROOTFS) \
+		ubifs firmware $@
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
 	@mv $@.new $@
 endef
