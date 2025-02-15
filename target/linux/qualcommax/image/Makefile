@@ -1,6 +1,15 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
+define Build/qsdk-ipq-factory-nand-glinet
+	./gen_$(BOOT_SCRIPT)_bootscript.sh $@
+	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh $@.its \
+		script script $@.bootscript \
+		ubi firmware $@
+	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
+	@mv $@.new $@
+endef
+
 define Device/Default
 	PROFILES := Default
 	KERNEL_LOADADDR := 0x41000000
