@@ -1,0 +1,86 @@
+name: Build
+
+on: workflow_dispatch
+
+jobs:
+    build:
+        name: Build firmware images
+        runs-on: ubuntu-24.04-arm
+        env:
+          TARGET: qualcommax
+          SUBTARGET: ipq807x
+          VERSION: "24.10"
+        defaults:
+          run:
+            working-directory: ${{ env.TARGET }}_${{ env.VERSION }}
+        permissions:
+            actions: write
+            contents: write
+        steps:
+            - name: Install packages
+              uses: awalsh128/cache-apt-pkgs-action@v1
+              with:
+                packages: build-essential \
+                    clang \
+                    flex \
+                    bison \
+                    g++ \
+                    gawk \
+                    gcc-multilib \
+                    g++-multilib \
+                    gettext \
+                    git \
+                    libncurses5-dev \
+                    libssl-dev \
+                    python3-setuptools \
+                    python3-netifaces \
+                    rsync \
+                    swig \
+                    unzip \
+                    zlib1g-dev \
+                    file \
+                    wget
+
+            - name: Restore cache
+              id: cache-restore
+              uses: actions/cache/restore@v4
+              with:
+                path: ${{ env.TARGET }}_${{ env.VERSION }}
+                key: ${{ runner.os }}-${{ env.TARGET }}_${{ env.VERSION }}
+
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                path: ${{ env.TARGET }}_${{ env.VERSION }}
+                clean: false
+
+            - name: Get SHA
+              uses: benjlevesque/short-sha@v3.0
+
+            - name: Import config
+              run: mv .config_${{ env.TARGET }}_${{ env.SUBTARGET }}_${{ env.VERSION }} .config
+
+            - name: Update config
+              run: make defconfig
+
+            - name: Update feeds
+              run: make package/symlinks
+
+            - name: Prepare build
+              run: make -j$(($(nproc)+1)) download prepare
+
+            - name: Check dtb
+              run: make -j1 V=sc target/linux/dtb
+
+            - name: Build firmware images
+              run: make -j$(($(nproc)+1)) world
+
+            - name: Release
+              uses: ncipollo/release-action@v1
+              with:
+                tag: ${{ env.TARGET }}-${{ env.SUBTARGET }}-${{ env.VERSION }}-${{ env.SHA }}
+                artifacts: |
+                    ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/openwrt-${{ env.TARGET }}-${{ env.SUBTARGET }}-*
+                    ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/mt798*
+                makeLatest: true
+                body: "Branch: ${{ github.ref_name }}"
