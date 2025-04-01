@@ -1,0 +1,37 @@
+menu "Configuration options (for developers)"
+
+config RUST_SCCACHE
+	bool "Use sccache"
+	help
+	  Shared compilation cache; see https://github.com/mozilla/sccache
+
+config RUST_SCCACHE_DIR
+	string "Set sccache directory" if RUST_SCCACHE
+	default ""
+	help
+	  Store sccache in this directory.
+	  If not set, uses './.sccache'
+
+config RUST_USE_PREBUILT_BINARIES
+	bool "Use prebuilt Rust binaries for host"
+	default y
+	help
+	  Use official prebuilt Rust binaries for the host toolchain on supported
+	  platforms (Linux x86_64/arm64, macOS x86_64/arm64). The host libc is
+	  auto-detected and the matching binary (glibc or musl) is selected
+	  automatically. This significantly reduces build time by avoiding a
+	  full source compilation. Disable this to force building from source
+	  (e.g. for unsupported hosts or reproducibility).
+
+config RUST_USE_PREBUILT_STD
+	bool "Use prebuilt Rust standard library for target"
+	default n
+	help
+	  Use official prebuilt rust-std binaries for the target toolchain on
+	  supported platforms. The target triple is auto-detected from the
+	  OpenWrt target configuration. This significantly reduces build time
+	  by avoiding a full source compilation of the target standard library.
+	  Enable this to speed up builds when a prebuilt std is available for
+	  your target.
+
+endmenu
