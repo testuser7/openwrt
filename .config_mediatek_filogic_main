@@ -1,0 +1,17 @@
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+CONFIG_TARGET_mediatek_filogic_DEVICE_zyxel_wx5600-t0-ubootmod=y
+CONFIG_PACKAGE_airoha-en8811h-firmware=y
+CONFIG_PACKAGE_kmod-libphy=y
+CONFIG_PACKAGE_kmod-mt7981-firmware=y
+# CONFIG_PACKAGE_kmod-mt7986-firmware is not set
+CONFIG_PACKAGE_kmod-nls-base=y
+CONFIG_PACKAGE_kmod-phy-airoha-en8811h=y
+CONFIG_PACKAGE_kmod-rtc-pcf8563=y
+CONFIG_PACKAGE_kmod-usb-common=y
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
+CONFIG_PACKAGE_kmod-usb-xhci-mtk=y
+CONFIG_PACKAGE_kmod-usb3=y
+CONFIG_PACKAGE_mt7981-wo-firmware=y
+# CONFIG_PACKAGE_mt7986-wo-firmware is not set
