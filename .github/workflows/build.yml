@@ -1,0 +1,192 @@
+name: Build
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    name: Build firmware images
+    runs-on: ubuntu-26.04-arm
+    env:
+      OS: ubuntu-26.04-arm
+      TARGET: mediatek
+      SUBTARGET: filogic
+      VERSION: "main"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      #CCACHE_SECONDARY_STORAGE: "file:${{ github.workspace }}/.ccache_base|read-only=true|share-hits=false"
+    defaults:
+      run:
+        working-directory: ${{ env.TARGET }}_${{ env.VERSION }}
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - name: Start Workflow Telemetry
+        uses: dev-hato/actions-workflow-metrics@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          interval_seconds: "30"
+
+      - name: Install packages
+        uses: gerlero/apt-install@v1
+        with:
+          install-recommends: false
+          packages: >
+            gawk
+            glibc-source
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          cache: false
+
+      - name: Restore cache
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.TARGET }}_${{ env.VERSION }}
+          key: cache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}
+
+      #- name: Restore ccache_base
+      #  uses: actions/cache/restore@v6
+      #  with:
+      #    path: ${{ env.CCACHE_DIR }}_base
+      #    key: ccache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}-${{ github.ref_name }}
+
+      - name: Ccache stats clear
+        run: staging_dir/host/bin/ccache -z
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          path: ${{ env.TARGET }}_${{ env.VERSION }}
+          clean: false
+
+      - name: Get SHA
+        uses: benjlevesque/short-sha@v4.0
+
+      - name: Update feeds
+        run: make package/symlinks
+
+      - name: Makefiles mdio-tools smartdns node
+        run: |
+          cp mdio-tools/Makefile feeds/packages/net/mdio-tools/Makefile
+          cp node/Makefile feeds/packages/lang/node/Makefile
+          cp smartdns/Makefile feeds/packages/net/smartdns/Makefile
+          cp rust/Config.in feeds/packages/lang/rust/Config.in
+          cp rust/Makefile feeds/packages/lang/rust/Makefile
+          cp rust/rust-values.mk feeds/packages/lang/rust/rust-values.mk
+          mkdir feeds/packages/lang/rust/build-std-helper
+          cp rust/Cargo.toml feeds/packages/lang/rust/build-std-helper/Cargo.toml
+          mkdir feeds/packages/lang/rust/build-std-helper/src
+          cp rust/lib.rs feeds/packages/lang/rust/build-std-helper/src/lib.rs
+
+      - name: Import config
+        run: mv .config_${{ env.TARGET }}_${{ env.SUBTARGET }}_${{ env.VERSION }} .config
+
+      - name: Add Go path
+        run: echo "CONFIG_GOLANG_EXTERNAL_BOOTSTRAP_ROOT=\"$(go env GOROOT)\"" >> .config
+
+      - name: Update config
+        run: make defconfig
+
+      - name: Prepare build
+        id: prepare-build
+        #run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) download tools/compile toolchain/compile
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) download prepare
+
+      - name: Build Rust
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) package/rust/host/compile V=sc
+
+      - name: Check dtb
+        run: make -j1 V=sc target/linux/dtb
+
+      - name: Build firmware images
+        id: firmware-images
+        run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) world
+
+      - name: Build smartdns
+        if: (success() || failure()) && steps.firmware-images.outcome == 'failure'
+        run: |
+          make -j1 V=sc package/smartdns/clean
+          make -j1 V=sc package/smartdns/compile
+
+      - name: Ccache stats
+        run: staging_dir/host/bin/ccache -s
+
+      - name: Release
+        id: gh-release
+        if: steps.firmware-images.outcome == 'success'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/openwrt-${{ env.TARGET }}-${{ env.SUBTARGET }}-*
+            ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/mt798*
+          tag_name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-${{ env.VERSION }}-${{ env.SHA }}
+          target_commitish: ${{ github.sha }}
+          body: "Branch: ${{ github.ref_name }}"
+          make_latest: true
+
+      - name: Release
+        if: steps.firmware-images.outcome == 'success' && steps.gh-release.outcome == 'failure'
+        uses: ncipollo/release-action@v1
+        with:
+          commit: ${{ github.sha }}
+          tag: ${{ env.TARGET }}-${{ env.SUBTARGET }}-${{ env.VERSION }}-${{ env.SHA }}
+          artifacts: |
+            ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/openwrt-${{ env.TARGET }}-${{ env.SUBTARGET }}-*
+            ${{ env.TARGET }}_${{ env.VERSION }}/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/mt798*
+          makeLatest: true
+          body: "Branch: ${{ github.ref_name }}"
+
+      - name: Delete old ccache
+        if: (success() || failure()) && steps.ccache-restore.outputs.cache-hit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CACHE_SIZE=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+          CACHE_SIZE_API_2=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+          echo "Cache size ${CACHE_SIZE}/${CACHE_SIZE_API_2}."
+          gh cache delete "ccache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}-${{ github.ref_name }}"
+          START=$SECONDS
+          TIMEOUT=6000
+          while [ $(( SECONDS - START )) -lt $TIMEOUT ]; do
+            sleep 5
+            CACHE_SIZE_NEW=$(gh cache list --limit 100 --json sizeInBytes --jq '[.[].sizeInBytes] | add // 0')
+            CACHE_SIZE_API=$(gh api /repos/${{ github.repository }}/actions/cache/usage --jq '.active_caches_size_in_bytes')
+            if [ "$CACHE_SIZE_NEW" -eq "$CACHE_SIZE_API" ]; then
+              ELAPSED=$(( SECONDS - START ))
+              echo "Cache size updated after ${ELAPSED}s."
+              break
+            fi
+            echo "Cache size after ${CACHE_SIZE_NEW}/${CACHE_SIZE_API}."
+          done
+
+      - name: Save ccache
+        if: success() || failure()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}-${{ github.ref_name }}
+
+      - name: Clean binaries and config
+        if: (success() || failure()) && steps.cache-restore.outputs.cache-hit != 'true' && github.ref_name == github.event.repository.default_branch
+        run: |
+          make target/linux/clean config-clean
+          find build_dir/host build_dir/target-*/host build_dir/toolchain-* -mindepth 2 -maxdepth 2 ! -name '.configured' ! -name '.built' ! \( -name '.prepared*' ! -name '*_check' \) -exec rm -fr {} +
+          rm -rf bin tmp .config* *.pem
+
+      - name: Save cache
+        if: (success() || failure()) && steps.cache-restore.outputs.cache-hit != 'true' && github.ref_name == github.event.repository.default_branch
+        id: cache-save
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.TARGET }}_${{ env.VERSION }}
+          key: cache-${{ env.OS }}-${{ env.TARGET }}_${{ env.VERSION }}
