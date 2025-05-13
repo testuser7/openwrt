@@ -95,14 +95,14 @@
 		led_green_signal: green_signal {
 			gpios = <&pio 26 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WAN;
+			function = LED_FUNCTION_LAN;
 			function-enumerator = <0>;
 		};
 
 		led_red_signal: red_signal{
 			gpios = <&pio 32 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_RED>;
-			function = LED_FUNCTION_WAN;
+			function = LED_FUNCTION_LAN;
 			function-enumerator = <1>;
 		};
 
@@ -142,7 +142,7 @@
                 #size-cells = <1>;
                 compatible = "spi-nand";
                 reg = <1>;
-                spi-max-frequency = <20000000>;
+                spi-max-frequency = <50000000>;
                 spi-tx-bus-width = <4>;
                 spi-rx-bus-width = <4>;
 
@@ -294,20 +294,22 @@
 	gmac0: mac@0 {
 		compatible = "mediatek,eth-mac";
 		reg = <0>;
-		nvmem-cells = <&macaddr 1>;
+		nvmem-cells = <&macaddr 0>;
 		nvmem-cell-names = "mac-address";
 		phy-mode = "2500base-x";
 		phy-handle = <&phy5>;
+		label = "lan2";
 	
 	};
 	
 	gmac1: mac@1 {
 		compatible = "mediatek,eth-mac";
 		reg = <1>;
-		nvmem-cells = <&macaddr 0>;
+		nvmem-cells = <&macaddr 1>;
 		nvmem-cell-names = "mac-address";
 		phy-mode = "2500base-x";
 		phy-handle = <&phy6>;
+		label = "lan1";
 	};
 	
 	mdio: mdio-bus{
@@ -346,8 +348,7 @@
 				led@0 {
 					reg = <0>;
 					color = <LED_COLOR_ID_GREEN>;
-					function = LED_FUNCTION_WAN;
-					active-high;
+					function = LED_FUNCTION_LAN;
 				};
 			};
 		};
@@ -428,12 +429,12 @@
 };
 
 &gmac0 {
-	nvmem-cells = <&macaddr_factory_002a 0>;
+	nvmem-cells = <&macaddr_factory_0024 0>;
 	nvmem-cell-names = "mac-address";
 };
 
 &gmac1 {
-	nvmem-cells = <&macaddr_factory_0024 0>;
+	nvmem-cells = <&macaddr_factory_002a 0>;
 	nvmem-cell-names = "mac-address";
 };
 
