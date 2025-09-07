@@ -308,7 +308,7 @@
 	gmac0: mac@0 {
 		compatible = "mediatek,eth-mac";
 		reg = <0>;
-		nvmem-cells = <&macaddr 1>;
+		nvmem-cells = <&macaddr_factory_24 0>;
 		nvmem-cell-names = "mac-address";
 		phy-mode = "2500base-x";
 		phy-handle = <&phy5>;
@@ -318,7 +318,7 @@
 	gmac1: mac@1 {
 		compatible = "mediatek,eth-mac";
 		reg = <1>;
-		nvmem-cells = <&macaddr 0>;
+		nvmem-cells = <&macaddr_factory_2a 0>;
 		nvmem-cell-names = "mac-address";
 		phy-mode = "2500base-x";
 		phy-handle = <&phy6>;
@@ -437,14 +437,4 @@
 			};
 		};
 	};
-};
-
-&gmac0 {
-	nvmem-cells = <&macaddr_factory_24 0>;
-	nvmem-cell-names = "mac-address";
-};
-
-&gmac1 {
-	nvmem-cells = <&macaddr_factory_2a 0>;
-	nvmem-cell-names = "mac-address";
 };
