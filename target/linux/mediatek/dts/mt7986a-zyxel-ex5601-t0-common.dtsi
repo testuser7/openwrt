@@ -206,6 +206,7 @@
 	gmac1: mac@1 {
 		compatible = "mediatek,eth-mac";
 		reg = <1>;
+		label = "wan";
 		phy-mode = "2500base-x";
 		phy = <&phy6>;
 
@@ -285,6 +286,7 @@
 
 				port@6 {
 					reg = <6>;
+					label = "cpu";
 					ethernet = <&gmac0>;
 					phy-mode = "2500base-x";
 
