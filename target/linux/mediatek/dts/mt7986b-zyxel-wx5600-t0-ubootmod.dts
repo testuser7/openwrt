@@ -75,28 +75,28 @@
 			function = LED_FUNCTION_BOOT;
 		};
 
-		led_red_pwr: red_power {
+		red_power {
 			gpios = <&pio 15 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_BOOT;
 			panic-indicator;
 		};
 
-		led_green_signal: green_signal {
+		green_signal {
 			gpios = <&pio 26 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_LAN;
 			function-enumerator = <0>;
 		};
 
-		led_red_signal: red_signal{
+		red_signal{
 			gpios = <&pio 32 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_LAN;
 			function-enumerator = <1>;
 		};
 
-		led_green_wlan: green_wlan {
+		green_wlan {
 			gpios = <&pio 14 GPIO_ACTIVE_LOW>;
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_WLAN;
@@ -125,8 +125,6 @@
 	status = "okay";
 
 	spi_nand@0 {
-		#address-cells = <1>;
-		#size-cells = <1>;
 		compatible = "spi-nand";
 		reg = <0>;
 		spi-max-frequency = <52000000>;
@@ -240,13 +238,6 @@
 };
 
 &pio {
-	spic_pins_g2: spic-pins-29-to-32 {
-		mux {
-			function = "spi";
-			groups = "spi1_2";
-		};
-	};
-
 	spi_flash_pins: spi-flash-pins-33-to-38 {
 		mux {
 			function = "spi";
