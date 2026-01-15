@@ -149,7 +149,7 @@
 +CONFIG_LED_BOOT=y
 --- /dev/null
 +++ b/arch/arm/dts/mt7986b-zyxel_wx5600-t0.dts
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,192 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Author: Valerio 'ftp21' Mancini <ftp21@ftp21.eu>
@@ -243,12 +243,6 @@
 +	status = "okay";
 +};
 +
-+&uart1 {
-+	pinctrl-names = "default";
-+	pinctrl-0 = <&uart1_pins>;
-+	status = "disabled";
-+};
-+
 +&eth {
 +        status = "okay";
 +        mediatek,gmac-id = <0>;
@@ -267,20 +261,6 @@
 +};
 +
 +&pio {
-+	spic_pins: spi1-pins-func-1 {
-+		mux {
-+			function = "spi";
-+			groups = "spi1_2";
-+		};
-+	};
-+
-+	uart1_pins: spi1-pins-func-3 {
-+		mux {
-+			function = "uart";
-+			groups = "uart1_2";
-+		};
-+	};
-+
 +	spi_flash_pins: spi0-pins-func-1 {
 +		mux {
 +			function = "flash";
