@@ -154,7 +154,7 @@ function device_htmode_append(config) {
 			config.ieee80211n = 1;
 			config.ht_capab = '';
 		}
-		if (config.htmode in [ 'HT40', 'HT40+', 'HT40-', 'VHT40', 'VHT80', 'VHT160', 'HE40', 'HE80', 'HE160', 'EHT40', 'EHT80', 'EHT160' ]) {
+		if (config.htmode in [ 'HT40', 'HT40+', 'HT40-', 'VHT40', 'VHT80', VHT80P80, 'VHT160', 'HE40', 'HE80', HE80P80, 'HE160', 'EHT40', 'EHT80', 'EHT160' ]) {
 			config.ieee80211n = 1;
 			if (!config.channel)
 				config.ht_capab = '[HT40+]';
@@ -216,6 +216,7 @@ function device_htmode_append(config) {
 	/* 802.11ac */
 	config.ieee80211ac = 1;
 	config.vht_oper_centr_freq_seg0_idx = 0;
+	config.vht_oper_centr_freq_seg1_idx = 0;
 	config.vht_oper_chwidth = 0;
 
 	switch (config.htmode) {
@@ -231,11 +232,17 @@ function device_htmode_append(config) {
 		break;
 
 	case 'VHT80':
+	case 'VHT80P80':
 	case 'HE80':
+	case 'HE80P80':
 	case 'EHT80':
 		let delta = [ -6, 6, 2, -2 ];
 		config.vht_oper_centr_freq_seg0_idx = config.channel + delta[((config.channel / 4) + config.channel_offset) % 4];
 		config.vht_oper_chwidth = 1;
+		if (wildcard(config.htmode, '*80P80')) {
+			config.vht_oper_centr_freq_seg1_idx = config.channel2 + delta[((config.channel2 / 4) + config.channel_offset) % 4];
+			config.vht_oper_chwidth = 3;
+		}
 		break;
 
 	case 'VHT160':
@@ -298,6 +305,7 @@ function device_htmode_append(config) {
 
 		case 'HE40':
 		case 'HE80':
+		case 'HE80P80':
 		case 'HE160':
 		case 'EHT40':
 		case 'EHT80':
@@ -382,7 +390,7 @@ function device_htmode_append(config) {
 
 		append_vars(config, [
 			'ieee80211ac', 'vht_oper_chwidth', 'vht_oper_centr_freq_seg0_idx',
-			'vht_capab'
+			'vht_oper_centr_freq_seg1_idx', 'vht_capab'
 		]);
 	}
 
@@ -403,6 +411,7 @@ function device_htmode_append(config) {
 				config.he_oper_chwidth = config.vht_oper_chwidth;
 			if (!config.he_oper_centr_freq_seg0_idx)
 				config.he_oper_centr_freq_seg0_idx = config.vht_oper_centr_freq_seg0_idx;
+			config.he_oper_centr_freq_seg1_idx = config.vht_oper_centr_freq_seg1_idx;
 		}
 
 		if (config.band == "6g") {
@@ -430,7 +439,7 @@ function device_htmode_append(config) {
 			config.he_twt_required= false;
 
 		append_vars(config, [
-			'ieee80211ax', 'he_oper_chwidth', 'he_oper_centr_freq_seg0_idx',
+			'ieee80211ax', 'he_oper_chwidth', 'he_oper_centr_freq_seg0_idx', 'he_oper_centr_freq_seg1_idx',
 			'he_su_beamformer', 'he_su_beamformee', 'he_mu_beamformer', 'he_twt_required',
 			'he_default_pe_duration', 'he_rts_threshold', 'he_mu_edca_qos_info_param_count',
 			'he_mu_edca_qos_info_q_ack', 'he_mu_edca_qos_info_queue_request', 'he_mu_edca_qos_info_txop_request',
