@@ -103,6 +103,10 @@
 			"description": "Specifies the wireless channel. “auto” defaults to the lowest available channel, or utilizes the ACS algorithm depending on hardware/driver support",
 			"type": "string"
 		},
+		"channel2": {
+			"description": "Specifies the wireless second channel. Used for VHT80P80 and HE80P80",
+			"type": "number"
+		},
 		"channels": {
 			"type": "alias",
 			"default": "chanlist"
@@ -289,6 +293,10 @@
 			"description": "",
 			"type": "string"
 		},
+		"he_oper_centr_freq_seg1_idx": {
+			"description": "",
+			"type": "string"
+		},
 		"he_oper_chwidth": {
 			"description": "",
 			"type": "string"
@@ -355,8 +363,8 @@
 			"type": "string",
 			"enum": [
 				"NOHT", "HT20", "HT40-", "HT40+", "HT40",
-				"VHT20", "VHT40", "VHT80", "VHT160",
-				"HE20", "HE40", "HE80", "HE160",
+				"VHT20", "VHT40", "VHT80", "VHT80P80", "VHT160",
+				"HE20", "HE40", "HE80", "HE80P80", "HE160",
 				"EHT20", "EHT40", "EHT80", "EHT160", "EHT320" ]
 		},
 		"hwmode": {
