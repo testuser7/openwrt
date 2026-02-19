@@ -65,14 +65,26 @@
 	};
 
 	mdio_pins: mdio-state {
-		mdc-pins {
+		gpio {
+			pins = "gpio37";
+			function = "gpio";
+			bias-pull-up;
+		};
+
+		gpio-aqr {
+			pins = "gpio44";
+			function = "gpio";
+			output-high;
+		};
+
+		mdc {
 			pins = "gpio68";
 			function = "mdc";
 			drive-strength = <8>;
 			bias-pull-up;
 		};
 
-		mdio-pins {
+		mdio {
 			pins = "gpio69";
 			function = "mdio";
 			drive-strength = <8>;
@@ -365,8 +377,8 @@
 &mdio {
 	status = "okay";
 
-	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
+	pinctrl-0 = <&mdio_pins>;
 	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
 
 	ethernet-phy-package@0 {
