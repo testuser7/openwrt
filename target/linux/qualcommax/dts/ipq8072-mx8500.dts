@@ -65,14 +65,26 @@
 	};
 
 	mdio_pins: mdio-state {
-		mdc-pins {
+		gpio {
+			pins = "gpio37";
+			function = "gpio";
+			bias-pull-up;
+		};
+
+		gpio-aqr {
+			pins = "gpio44";
+			function = "gpio";
+			output-high;
+		};
+
+		mdc {
 			pins = "gpio68";
 			function = "mdc";
 			drive-strength = <8>;
 			bias-pull-up;
 		};
 
-		mdio-pins {
+		mdio {
 			pins = "gpio69";
 			function = "mdio";
 			drive-strength = <8>;
@@ -365,9 +377,11 @@
 &mdio {
 	status = "okay";
 
-	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
-	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+	pinctrl-0 = <&mdio_pins>;
+	reset-gpios = <&tlmm 37 GPIO_ACTIVE_HIGH>;
+	reset-delay-us = <10000>;
+	reset-post-delay-us = <50000>;
 
 	ethernet-phy-package@0 {
 		#address-cells = <1>;
@@ -402,6 +416,8 @@
 		compatible = "ethernet-phy-ieee802.3-c45";
 		reg = <8>;
 		reset-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <10000>;
+		reset-deassert-us = <50000>;
 		firmware-name = "marvell/AQR-G4_v5.6.5-AQR_WNC_SAQA-L2_GT_ID45287_VER24005.cld";
 		nvmem-cells = <&aqr_fw>;
 		nvmem-cell-names = "firmware";
