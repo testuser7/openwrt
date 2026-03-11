@@ -29,7 +29,7 @@ Signed-off-by: Jonas Köppeler <j.koeppeler@tu-berlin.de>
  #define CAKE_QUEUES (1024)
  #define CAKE_FLOW_MASK 63
  #define CAKE_FLOW_NAT_FLAG 64
-+static u64 g_sync_time_ns = 200*NSEC_PER_USEC;
++static u64 g_sync_time_ns = 500*NSEC_PER_USEC;
 +static struct dentry *cake_mq_debugfs;
  
  /* struct cobalt_params - contains codel and blue parameters
