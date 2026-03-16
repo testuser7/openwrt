@@ -5,7 +5,7 @@
 
 #include "ipq8074.dtsi"
 #include "ipq8074-hk-cpu.dtsi"
-#include "ipq8074-ess.dtsi"
+#include "ipq8074-ess-cleanup.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
@@ -17,12 +17,12 @@
 	aliases {
 		serial0 = &blsp1_uart5;
 		mdio-gpio0 = &mdio1;
-		ethernet0 = &dp1;
-		ethernet1 = &dp2;
-		ethernet2 = &dp3;
-		ethernet3 = &dp4;
-		ethernet4 = &dp5_syn;
-		ethernet5 = &dp6_syn;
+		ethernet0 = &lan4;
+		ethernet1 = &lan3;
+		ethernet2 = &lan2;
+		ethernet3 = &lan1;
+		ethernet4 = &port_sfp;
+		ethernet5 = &port_10g;
 		led-boot = &led_pwr;
 		led-failsafe = &led_pwr;
 		led-running = &led_pwr;
@@ -159,6 +159,16 @@
 		gpios = <&tlmm 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
+	};
+
+	sfp: sfp {
+		compatible = "sff,sfp";
+
+		i2c-bus = <&blsp1_i2c2>;
+
+		mod-def0-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
+		tx-disable-gpios = <&tlmm 48 GPIO_ACTIVE_HIGH>;
+		tx-fault-gpios = <&tlmm 62 GPIO_ACTIVE_HIGH>;
 	};
 };
 
@@ -560,7 +570,7 @@
 			port@0 {
 				reg = <0>;
 				label = "cpu";
-				ethernet = <&dp1>;
+				ethernet = <&lan4>;
 				phy-mode = "rgmii-rxid";
 				phy-handle = <&qca8035>;
 			};
@@ -643,93 +653,91 @@
 	pinctrl-0 = <&uniphy_pins>;
 	pinctrl-names = "default";
 
-	switch_lan_bmp = <(ESS_PORT1 | ESS_PORT2 | ESS_PORT3 | ESS_PORT5 | ESS_PORT6)>; /* lan port bitmap */
-	switch_wan_bmp = <ESS_PORT4>; /* wan port bitmap */
-	switch_mac_mode = <MAC_MODE_QSGMII>; /* mac mode for uniphy instance0*/
-	switch_mac_mode1 = <MAC_MODE_10GBASE_R>; /* mac mode for uniphy instance1*/
-	switch_mac_mode2 = <MAC_MODE_USXGMII>; /* mac mode for uniphy instance2*/
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
 
-	qcom,port_phyinfo {
 		port@0 {
-			port_id = <1>;
-			phy_address = <0x8>;
-		};
-		port@1 {
-			port_id = <2>;
-			phy_address = <0x9>;
-		};
-		port@2 {
-			port_id = <3>;
-			phy_address = <0xa>;
-		};
-		port@3 {
-			port_id = <4>;
-			phy_address = <0xb>;
+			reg = <0>;
+			ethernet = <&edma>;
+			phy-mode = "internal";
+
+			fixed-link {
+				speed = <1000>;
+				full-duplex;
+			};
 		};
 
-		sfp: port@4 {
-			port_id = <5>;
-			phy_address = <30>;
-			phy_i2c_address = <30>;
-			phy-i2c-mode; /*i2c access phy */
-			media-type = "sfp"; /* fiber mode */
-			sfp_tx_dis_pin = <&tlmm 48 GPIO_ACTIVE_HIGH>;
-			sfp_mod_present_pin = <&tlmm 46 GPIO_ACTIVE_LOW>;
+		lan4: port@1 {
+			reg = <1>;
+			label = "switch";
+			phy-handle = <&qca8075_8>;
+			phy-mode = "qsgmii";
+			pcs-handle = <&uniphy0 0>;
 		};
 
-		/* PCB R5.00, AQR113C */
-		port@5_113c {
-			status = "disabled";
-			port_id = <6>;
-			phy_address = <8>;
-			ethernet-phy-ieee802.3-c45;
-			mdiobus = <&mdio1>;
+		lan3: port@2 {
+			reg = <2>;
+			label = "lan2";
+			phy-handle = <&qca8075_9>;
+			phy-mode = "qsgmii";
+			pcs-handle = <&uniphy0 1>;
+		};
+
+		lan2: port@3 {
+			reg = <3>;
+			label = "lan1";
+			phy-handle = <&qca8075_a>;
+			phy-mode = "qsgmii";
+			pcs-handle = <&uniphy0 2>;
+		};
+
+
+		lan1: port@4 {
+			reg = <4>;
+			label = "wan";
+			phy-handle = <&qca8075_b>;
+			phy-mode = "qsgmii";
+			pcs-handle = <&uniphy0 3>;
+		};
+
+		port_sfp: port@5 {
+			reg = <5>;
+			label = "10g-sfp";
+
+			// phy-handle = <&aqr113c>;
+			sfp = <&sfp>;
+
+			managed = "in-band-status";
+			phy-mode = "usxgmii";
+
+			pcs-handle = <&uniphy1 0>;
+		};
+
+		port_10g: port@6 {
+			reg = <6>;
+			label = "10g-copper";
+			phy-handle = <&aqr113c>;
+			phy-mode = "usxgmii";
+			pcs-handle = <&uniphy2 0>;
 		};
 	};
 };
 
+&uniphy0 {
+	status = "okay";
+};
+
+&uniphy1 {
+	status = "okay";
+};
+
+&uniphy2 {
+	status = "okay";
+};
+
 &edma {
 	status = "okay";
-};
-
-&dp1 {
-	status = "okay";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_8>;
-	label = "switch";
-};
-
-&dp2 {
-	status = "okay";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_9>;
-	label = "lan2";
-};
-
-&dp3 {
-	status = "okay";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_a>;
-	label = "lan1";
-};
-
-&dp4 {
-	status = "okay";
-	phy-mode = "qsgmii";
-	phy-handle = <&qca8075_b>;
-	label = "wan";
-};
-
-&dp5_syn {
-	status = "okay";
-	phy-handle = <&sfp>;
-	label = "10g-sfp";
-};
-
-&dp6_syn {
-	status = "okay";
-	phy-handle = <&aqr113c>;
-	label = "10g-copper";
 };
 
 &wifi {
