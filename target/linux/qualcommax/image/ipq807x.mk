@@ -262,7 +262,7 @@ define Device/linksys_mx8500
 	$(call Device/linksys_mx)
 	DEVICE_MODEL := MX8500
 	DEVICE_PACKAGES += ipq-wifi-linksys_mx8500 kmod-ath11k-pci \
-		ath11k-firmware-qcn9074 kmod-hci-uart
+		ath11k-firmware-qcn9074 kmod-hci-uart -kmod-qca-nss-dp kmod-qca-edma
 endef
 TARGET_DEVICES += linksys_mx8500
 
