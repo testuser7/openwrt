@@ -159,6 +159,12 @@
 	};
 
 	mdio_pins: mdio_pinmux {
+		gpio {
+			pins = "gpio77";
+			function = "gpio";
+			bias-pull-up;
+			output-low;
+		};
 		mux_0 {
 			pins = "gpio64";
 			function = "mdc";
