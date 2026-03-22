@@ -213,6 +213,8 @@
 	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
 	reset-gpios = <&tlmm 75 GPIO_ACTIVE_LOW>;
+	/*reset-delay-us = <10000>;*/
+	/*reset-post-delay-us = <50000>;*/
 	status = "okay";
 
 	ethernet-phy-package {
@@ -322,9 +324,11 @@
 
 	aqr114c: ethernet-phy@8 {
 		reg = <8>;
-		reset-gpios = <&tlmm 77 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&tlmm 77 GPIO_ACTIVE_LOW>;
 		compatible = "ethernet-phy-ieee802.3-c45";
 		firmware-name = "marvell/AQR114C.cld";
+		/*reset-assert-us = <10000>;*/
+		/*reset-deassert-us = <50000>;*/
 		nvmem-cells = <&aqr_fw>;
 		nvmem-cell-names = "firmware";
 
