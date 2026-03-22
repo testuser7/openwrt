@@ -1,0 +1,180 @@
+--- a/include/linux/phy.h
++++ b/include/linux/phy.h
+@@ -446,8 +446,12 @@ struct mii_bus {
+ 	int reset_delay_us;
+ 	/** @reset_post_delay_us: GPIO reset deassert delay in microseconds */
+ 	int reset_post_delay_us;
+-	/** @reset_gpiod: Reset GPIO descriptor pointer */
++	/** @reset_gpiod: Reset GPIO descriptor pointer (for backward compatibility) */
+ 	struct gpio_desc *reset_gpiod;
++	/** @reset_gpiods: Array of reset GPIO descriptors for multiple reset lines */
++	struct gpio_desc **reset_gpiods;
++	/** @reset_gpiods_count: Number of reset GPIOs in the reset_gpiods array */
++	int reset_gpiods_count;
+ 
+ 	/** @shared_lock: protect access to the shared element */
+ 	struct mutex shared_lock;
+--- a/drivers/net/phy/mdio_bus.c
++++ b/drivers/net/phy/mdio_bus.c
+@@ -673,6 +673,96 @@ static bool mdiobus_prevent_c45_scan(str
+ }
+ 
+ /**
++ * mdiobus_get_reset_gpiods - Retrieve all reset GPIO descriptors for the MDIO bus
++ * @bus: target mii_bus
++ *
++ * Attempts to retrieve one or more reset GPIO descriptors from the device tree
++ * or firmware node. Stores them in bus->reset_gpiods array and updates 
++ * bus->reset_gpiods_count.
++ *
++ * Returns 0 on success, negative on error.
++ */
++static int mdiobus_get_reset_gpiods(struct mii_bus *bus)
++{
++	struct gpio_descs *gpiod_descs;
++	int i;
++
++	/* Try to get reset-gpios array from device tree */
++	gpiod_descs = devm_gpiod_get_array_optional(&bus->dev, "reset",
++						    GPIOD_OUT_HIGH);
++	if (IS_ERR(gpiod_descs))
++		return dev_err_probe(&bus->dev, PTR_ERR(gpiod_descs),
++				     "couldn't get reset GPIOs\n");
++
++	if (!gpiod_descs)
++		return 0;	/* No reset-gpios property found */
++
++	/* Allocate array to store individual GPIO descriptors */
++	bus->reset_gpiods = devm_kcalloc(&bus->dev, gpiod_descs->ndescs,
++					 sizeof(*bus->reset_gpiods),
++					 GFP_KERNEL);
++	if (!bus->reset_gpiods)
++		return -ENOMEM;
++
++	/* Copy GPIO descriptors from the array structure */
++	for (i = 0; i < gpiod_descs->ndescs; i++)
++		bus->reset_gpiods[i] = gpiod_descs->desc[i];
++
++	bus->reset_gpiods_count = gpiod_descs->ndescs;
++	return 0;
++}
++
++/**
++ * mdiobus_reset_assert - Assert all reset GPIOs for the MDIO bus
++ * @bus: target mii_bus
++ *
++ * Sets all reset GPIOs to active state (assert).
++ */
++static void mdiobus_reset_assert(struct mii_bus *bus)
++{
++	int i;
++
++	/* If we have multiple reset GPIOs, assert all of them */
++	if (bus->reset_gpiods && bus->reset_gpiods_count > 0) {
++		for (i = 0; i < bus->reset_gpiods_count; i++) {
++			if (bus->reset_gpiods[i])
++				gpiod_set_value_cansleep(bus->reset_gpiods[i], 1);
++		}
++	} else if (bus->reset_gpiod) {
++		/* Fall back to single reset GPIO for backward compatibility */
++		gpiod_set_value_cansleep(bus->reset_gpiod, 1);
++	}
++}
++
++/**
++ * mdiobus_reset_deassert - Deassert all reset GPIOs for the MDIO bus
++ * @bus: target mii_bus
++ *
++ * Sets all reset GPIOs to inactive state (deassert) with appropriate delays.
++ */
++static void mdiobus_reset_deassert(struct mii_bus *bus)
++{
++	int i;
++
++	/* If we have multiple reset GPIOs, deassert all of them */
++	if (bus->reset_gpiods && bus->reset_gpiods_count > 0) {
++		fsleep(bus->reset_delay_us);
++		for (i = 0; i < bus->reset_gpiods_count; i++) {
++			if (bus->reset_gpiods[i])
++				gpiod_set_value_cansleep(bus->reset_gpiods[i], 0);
++		}
++		if (bus->reset_post_delay_us > 0)
++			fsleep(bus->reset_post_delay_us);
++	} else if (bus->reset_gpiod) {
++		/* Fall back to single reset GPIO for backward compatibility */
++		fsleep(bus->reset_delay_us);
++		gpiod_set_value_cansleep(bus->reset_gpiod, 0);
++		if (bus->reset_post_delay_us > 0)
++			fsleep(bus->reset_post_delay_us);
++	}
++}
++
++/**
+  * __mdiobus_register - bring up all the PHYs on a given bus and attach them to bus
+  * @bus: target mii_bus
+  * @owner: module containing bus accessor functions
+@@ -743,22 +833,33 @@ int __mdiobus_register(struct mii_bus *b
+ 	mutex_init(&bus->mdio_lock);
+ 	mutex_init(&bus->shared_lock);
+ 
+-	/* assert bus level PHY GPIO reset */
+-	gpiod = devm_gpiod_get_optional(&bus->dev, "reset", GPIOD_OUT_HIGH);
+-	if (IS_ERR(gpiod)) {
+-		err = dev_err_probe(&bus->dev, PTR_ERR(gpiod),
+-				    "mii_bus %s couldn't get reset GPIO\n",
++	/* Get bus level PHY GPIO reset details - multiple reset GPIOs if available */
++	err = mdiobus_get_reset_gpiods(bus);
++	if (err) {
++		err = dev_err_probe(&bus->dev, err,
++				    "mii_bus %s couldn't get reset GPIOs\n",
+ 				    bus->id);
+ 		device_del(&bus->dev);
+ 		return err;
+-	} else	if (gpiod) {
+-		bus->reset_gpiod = gpiod;
+-		fsleep(bus->reset_delay_us);
+-		gpiod_set_value_cansleep(gpiod, 0);
+-		if (bus->reset_post_delay_us > 0)
+-			fsleep(bus->reset_post_delay_us);
+ 	}
+ 
++	/* assert bus level PHY GPIO reset (fall back to single GPIO if no multiple GPIOs) */
++	if (!bus->reset_gpiods || bus->reset_gpiods_count == 0) {
++		gpiod = devm_gpiod_get_optional(&bus->dev, "reset", GPIOD_OUT_HIGH);
++		if (IS_ERR(gpiod)) {
++			err = dev_err_probe(&bus->dev, PTR_ERR(gpiod),
++						"mii_bus %s couldn't get reset GPIO\n",
++						bus->id);
++			device_del(&bus->dev);
++			return err;
++			} else if (gpiod) {
++				bus->reset_gpiod = gpiod;
++		}
++	}
++
++	/* Deassert reset GPIOs with proper delays */
++	mdiobus_reset_deassert(bus);
++
+ 	if (bus->reset) {
+ 		err = bus->reset(bus);
+ 		if (err)
+@@ -796,8 +897,7 @@ error:
+ 	}
+ error_reset_gpiod:
+ 	/* Put PHYs in RESET to save power */
+-	if (bus->reset_gpiod)
+-		gpiod_set_value_cansleep(bus->reset_gpiod, 1);
++	mdiobus_reset_assert(bus);
+ 
+ 	device_del(&bus->dev);
+ 	return err;
+@@ -823,8 +923,7 @@ void mdiobus_unregister(struct mii_bus *
+ 	}
+ 
+ 	/* Put PHYs in RESET to save power */
+-	if (bus->reset_gpiod)
+-		gpiod_set_value_cansleep(bus->reset_gpiod, 1);
++	mdiobus_reset_assert(bus);
+ 
+ 	device_del(&bus->dev);
+ }
