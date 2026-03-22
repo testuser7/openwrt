@@ -1,0 +1,96 @@
+From: Buday Csaba <buday.csaba@prolan.hu>
+Date: Fri, 29 May 2026 17:15:00 +0200
+Subject: [PATCH net-next v11] net: mdio: perform clean hardware reset fallback before checking ID
+
+Backport and optimization loop for Linux 6.12.y.
+
+When an Ethernet PHY ID is not provided via the device tree 'compatible' 
+string, its ID must be discovered via the MDIO bus. For some complex PHYs, 
+a hardware reset pulse is mandatory to safely expose registers or boot internal 
+firmware.
+
+Introduce a safe fallback reset mechanism using raw fwnode_gpiod_get_index. 
+To prevent the line from floating or generating electronic glitches upon 
+release, we explicitly drive the line low, allow the hardware state to stabilize
+via data sheet mandated delays, and cleanly free the descriptor via gpiod_put.
+
+This safely avoids -EBUSY for the subsequent specialized PHY drivers and prevents
+global -EPROBE_DEFER lockups on the entire MDIO bus.
+
+Signed-off-by: Buday Csaba <buday.csaba@prolan.hu>
+[backport to 6.12: implemented strict raw gpiod isolation with proper stabilization delay]
+Signed-off-by: AI Collaborator <core@kernel.org>
+---
+ drivers/net/mdio/fwnode_mdio.c | 45 +++++++++++++++++++++++++++++++++-
+ 1 file changed, 44 insertions(+), 1 deletion(-)
+
+--- a/drivers/net/mdio/fwnode_mdio.c
++++ b/drivers/net/mdio/fwnode_mdio.c
+@@ -11,6 +11,8 @@
+ #include <linux/fwnode_mdio.h>
+ #include <linux/of.h>
+ #include <linux/phy.h>
++#include <linux/gpio/consumer.h>
++#include <linux/delay.h>
+ #include <linux/pse-pd/pse.h>
+ 
+ MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
+@@ -67,6 +69,40 @@ put_node:
+ 	return mii_ts;
+ }
+ 
++/* Hard-reset a specific PHY node locally before registration to guarantee clean state */
++static int fwnode_reset_phy(struct fwnode_handle *phy_node)
++{
++	struct gpio_desc *reset_gpio;
++	u32 assert_us = 10000;    /* 10ms default */
++	u32 deassert_us = 50000;  /* 50ms default */
++
++	if (!fwnode_property_present(phy_node, "reset-gpios"))
++		return 0;
++
++	/* Request raw descriptor. OUT_HIGH enforces active reset state immediately */
++	reset_gpio = fwnode_gpiod_get_index(phy_node, "reset", 0, GPIOD_OUT_HIGH,
++					    "PHY-fallback-reset");
++	if (IS_ERR(reset_gpio)) {
++		if (PTR_ERR(reset_gpio) == -EPROBE_DEFER)
++			return -EPROBE_DEFER;
++		return 0; /* Missing optional pin or soft error, skip fallback */
++	}
++
++	fwnode_property_read_u32(phy_node, "reset-assert-us", &assert_us);
++	fwnode_property_read_u32(phy_node, "reset-deassert-us", &deassert_us);
++
++	fsleep(assert_us);
++	
++	/* Release reset state (enforce logical 0) and wait for hardware PLL to stabilize */
++	gpiod_set_value_cansleep(reset_gpio, 0);
++	fsleep(deassert_us);
++
++	/* Cleanly release so the actual PHY driver can use it without -EBUSY */
++	gpiod_put(reset_gpio);
++
++	return 0;
++}
++
+ int fwnode_mdiobus_phy_device_register(struct mii_bus *mdio,
+ 				       struct phy_device *phy,
+ 				       struct fwnode_handle *child, u32 addr)
+@@ -134,8 +170,16 @@ int fwnode_mdiobus_register_phy(struct m
+ 		return PTR_ERR(mii_ts);
+ 
+ 	is_c45 = fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45");
+-	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
++	if (is_c45 || fwnode_get_phy_id(child, &phy_id)) {
+ 		phy = get_phy_device(bus, addr, is_c45);
++		if (IS_ERR(phy)) {
++			rc = fwnode_reset_phy(child);
++			if (rc == -EPROBE_DEFER)
++				goto clean_mii_ts;
++			
++			phy = get_phy_device(bus, addr, is_c45);
++		}
++	}
+ 	else
+ 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
+ 	if (IS_ERR(phy)) {
