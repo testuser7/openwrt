@@ -20,13 +20,6 @@
 		led-running = &led_system_blue;
 		led-upgrade = &led_system_red;
 		serial0 = &blsp1_uart5;
-		/* Aliases as required by u-boot to patch MAC addresses */
-		ethernet0 = &dp6_syn;
-		ethernet1 = &dp4;
-		ethernet2 = &dp3;
-		ethernet3 = &dp2;
-		ethernet4 = &dp1;
-		label-mac-device = &dp6_syn;
 	};
 
 	chosen {
@@ -114,6 +107,47 @@
 
 		partitions {
 			compatible = "qcom,smem-part";
+
+			partition-0-art {
+				label = "0:art";
+				read-only;
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					macaddr_wan: macaddr@0 {
+						compatible = "mac-base";
+						reg = <0x0 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+
+					macaddr_lan1: macaddr@6 {
+						compatible = "mac-base";
+						reg = <0x6 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+
+					macaddr_lan2: macaddr@c {
+						compatible = "mac-base";
+						reg = <0xc 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+
+					macaddr_lan3: macaddr@12 {
+						compatible = "mac-base";
+						reg = <0x12 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+
+					macaddr_lan4: macaddr@18 {
+						compatible = "mac-base";
+						reg = <0x18 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+				};
+			};
 		};
 	};
 };
@@ -236,6 +270,8 @@
 	phy-mode = "qsgmii";
 	phy-handle = <&qca8075_0>;
 	label = "lan4";
+	nvmem-cells = <&macaddr_lan4 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &dp2 {
@@ -243,6 +279,8 @@
 	phy-mode = "qsgmii";
 	phy-handle = <&qca8075_1>;
 	label = "lan3";
+	nvmem-cells = <&macaddr_lan3 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &dp3 {
@@ -250,6 +288,8 @@
 	phy-mode = "qsgmii";
 	phy-handle = <&qca8075_2>;
 	label = "lan2";
+	nvmem-cells = <&macaddr_lan2 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &dp4 {
@@ -257,12 +297,16 @@
 	phy-mode = "qsgmii";
 	phy-handle = <&qca8075_3>;
 	label = "lan1";
+	nvmem-cells = <&macaddr_lan1 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &dp6_syn {
 	status = "okay";
 	phy-handle = <&qca8081>;
 	label = "wan";
+	nvmem-cells = <&macaddr_wan 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &wifi {
