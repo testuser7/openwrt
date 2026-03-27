@@ -254,7 +254,7 @@ define Device/linksys_mx5300
 	$(call Device/linksys_mx)
 	DEVICE_MODEL := MX5300
 	DEVICE_PACKAGES += kmod-rtc-ds1307 ipq-wifi-linksys_mx5300 \
-		kmod-ath10k ath10k-firmware-qca9984
+		kmod-ath10k ath10k-firmware-qca9984 -kmod-qca-nss-dp kmod-qca-edma
 endef
 TARGET_DEVICES += linksys_mx5300
 
