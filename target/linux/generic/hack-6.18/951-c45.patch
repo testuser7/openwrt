@@ -1,0 +1,84 @@
+diff --git a/drivers/net/mdio/fwnode_mdio.c b/drivers/net/mdio/fwnode_mdio.c
+index 285d8fc61..bc6ccafcd 100644
+--- a/drivers/net/mdio/fwnode_mdio.c
++++ b/drivers/net/mdio/fwnode_mdio.c
+@@ -9,6 +9,7 @@
+ #include <linux/acpi.h>
+ #include <linux/dev_printk.h>
+ #include <linux/fwnode_mdio.h>
++#include <linux/gpio/consumer.h>
+ #include <linux/of.h>
+ #include <linux/phy.h>
+ 
+@@ -16,6 +17,42 @@ MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("FWNODE MDIO bus (Ethernet PHY) accessors");
+ 
++#define PHY_RESET_DEASSERT_US_MAX	(500 * 1000)
++
++/* Deassert the PHY reset GPIO before MDIO identification so the
++ * PHY can respond to bus reads. Uses fwnode_gpiod_get_index()
++ * and then explicitly drives the line HIGH. The GPIO is left
++ * driven HIGH permanently — releasing via gpiod_put() would let
++ * TLMM revert the pin to its default asserted/LOW state and
++ * re-assert the PHY reset before phylink finishes its reset
++ * sequence.
++ */
++static int fwnode_mdiobus_pre_deassert_reset(struct fwnode_handle *child)
++{
++	struct gpio_desc *gpiod;
++	u32 deassert_delay_us = 0;
++	int ret;
++
++	gpiod = fwnode_gpiod_get_index(child, "reset", 0,
++				       GPIOD_OUT_LOW, "PHY reset");
++	if (IS_ERR(gpiod))
++		return 0;
++
++	ret = gpiod_set_value_cansleep(gpiod, 1);
++	if (ret)
++		return ret;
++
++	ret = fwnode_property_read_u32(child, "reset-deassert-us",
++				       &deassert_delay_us);
++	if (!ret && deassert_delay_us > 0) {
++		deassert_delay_us = clamp_val(deassert_delay_us, 0,
++					      PHY_RESET_DEASSERT_US_MAX);
++		usleep_range(deassert_delay_us, deassert_delay_us + 1000);
++	}
++
++	return 0;
++}
++
+ static struct mii_timestamper *
+ fwnode_find_mii_timestamper(struct fwnode_handle *fwnode)
+ {
+@@ -106,6 +143,8 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
+ 	u32 phy_id;
+ 	int rc;
+ 
++	fwnode_mdiobus_pre_deassert_reset(child);
++
+ 	mii_ts = fwnode_find_mii_timestamper(child);
+ 	if (IS_ERR(mii_ts))
+ 		return PTR_ERR(mii_ts);
+diff --git a/drivers/net/phy/mdio_bus.c b/drivers/net/phy/mdio_bus.c
+index 435424113..2755ef389 100644
+--- a/drivers/net/phy/mdio_bus.c
++++ b/drivers/net/phy/mdio_bus.c
+@@ -38,8 +38,13 @@ static int mdiobus_register_gpiod(struct mdio_device *mdiodev)
+ 	/* Deassert the optional reset signal */
+ 	mdiodev->reset_gpio = gpiod_get_optional(&mdiodev->dev,
+ 						 "reset", GPIOD_OUT_LOW);
+-	if (IS_ERR(mdiodev->reset_gpio))
+-		return PTR_ERR(mdiodev->reset_gpio);
++ 	if (IS_ERR(mdiodev->reset_gpio)) {
++		if (PTR_ERR(mdiodev->reset_gpio) == -EBUSY) {
++			mdiodev->reset_gpio = NULL;
++			return 0;
++		}
++ 		return PTR_ERR(mdiodev->reset_gpio);
++	}
+ 
+ 	if (mdiodev->reset_gpio)
+ 		gpiod_set_consumer_name(mdiodev->reset_gpio, "PHY reset");

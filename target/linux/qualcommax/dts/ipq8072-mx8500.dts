@@ -391,10 +391,20 @@
 			reg = <3>;
 		};
 	};
+};
 
+&edma {
+	status = "okay";
+
+	/* AQR114C C45 PHY is on the EMAC's internal SGAII MDIO, not the
+	 * external qcom,ipq4019-mdio controller at mdio@90000. We must
+	 * register it here so the EMAC driver's internal emac-mdio bus
+	 * (which supports C45) can find and manage it.
+	 */
 	aqr114c: ethernet-phy@8 {
 		compatible = "ethernet-phy-ieee802.3-c45";
 		reg = <8>;
+		phy-modes = "usxgmii";
 		reset-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
 		reset-assert-us = <10000>;
 		reset-deassert-us = <221000>;
@@ -481,10 +491,6 @@
 			nvmem-cell-names = "mac-address";
 		};
 	};
-};
-
-&edma {
-	status = "okay";
 };
 
 &ssphy_0 {
