@@ -193,6 +193,39 @@ static int edma_mdio_setup(struct edma_priv *priv)
 	return 0;
 }
 
+static void edma_fix_phy_interfaces(struct phy_device *phydev)
+{
+	u32 phy_id;
+	int i;
+
+	if (!phydev->is_c45)
+		return;
+
+	for (i = 0; i < MDIO_MMD_NUM; i++) {
+		phy_id = phydev->c45_ids.device_ids[i];
+		if (phy_id == 0x31c31c22) {
+			__set_bit(PHY_INTERFACE_MODE_USXGMII, phydev->possible_interfaces);
+			dev_info(&phydev->mdio.dev, "forced USXGMII into possible_interfaces\n");
+			return;
+		}
+	}
+}
+
+static int edma_fixup_phy_interfaces(struct edma_priv *priv)
+{
+	struct mii_bus *bus = priv->mii_bus;
+	int addr;
+
+	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
+		struct phy_device *phydev = mdiobus_get_phy(bus, addr);
+
+		if (phydev)
+			edma_fix_phy_interfaces(phydev);
+	}
+
+	return 0;
+}
+
 static void edma_irq_disable_all(struct edma_priv *priv)
 {
 	const struct edma_soc_data *soc = priv->soc;
@@ -1386,6 +1419,10 @@ static int edma_probe(struct platform_device *pdev)
 	ret = edma_mdio_setup(priv);
 	if (ret)
 		dev_warn(dev, "could not setup internal MDIO bus: %d\n", ret);
+
+	ret = edma_fixup_phy_interfaces(priv);
+	if (ret)
+		dev_warn(dev, "could not fixup phy interfaces: %d\n", ret);
 
 	SET_NETDEV_DEV(netdev, dev);
 	netdev->dev.of_node = dev->of_node;
