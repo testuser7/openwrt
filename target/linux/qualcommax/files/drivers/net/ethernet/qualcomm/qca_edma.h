@@ -242,6 +242,7 @@ struct edma_priv {
 	struct regmap *regmap;
 	struct reset_control *rst;
 	struct page_pool *page_pool;
+	struct mii_bus *mii_bus;
 
 	struct edma_ring txdesc_ring;
 	struct edma_ring txcmpl_ring;

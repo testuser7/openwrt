@@ -8,16 +8,190 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 #include <linux/interrupt.h>
+#include <linux/mdio.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
+#include <linux/of_mdio.h>
+#include <linux/phy.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/version.h>
 #include "qca_edma.h"
+
+/* EMAC MDIO controller registers */
+#define EMAC_MDIO_CTRL		0x001414
+#define EMAC_PHY_STS		0x001418
+
+#define MDIO_BUSY		BIT(27)
+#define MDIO_START		BIT(23)
+#define MDIO_RD_NWR		BIT(22)
+#define MDIO_CLK_SEL_BMSK	0x7000000
+#define MDIO_CLK_SEL_SHFT	24
+#define MDIO_CLK_25_4		0x11
+#define MDIO_REG_ADDR_BMSK	0x1f0000
+#define MDIO_REG_ADDR_SHFT	16
+#define MDIO_DATA_BMSK		0xffff
+#define MDIO_DATA_SHFT		0
+#define PHY_ADDR_BMSK		0x1f0000
+#define PHY_ADDR_SHFT		16
+
+#define SUP_PREAMBLE		0x0fffffff
+#define MII_MMD_CTRL		0x0d
+#define MII_MMD_DATA		0x0e
+#define MDIO_MODE_C45		0x80000000
+#define MDIO_CMD_ACCESS_START	BIT(30)
+#define MDIO_CMD_ACCESS_CODE_C45_ADDR	BIT(28)
+#define MDIO_CMD_ACCESS_CODE_C45_READ	(3 << 28)
+#define MDIO_CMD_ACCESS_CODE_C45_WRITE	(1 << 28)
+
+static int edma_mdio_read_poll(struct edma_priv *priv, u32 reg, u32 *val)
+{
+	int timeout = 10000;
+
+	do {
+		regmap_read(priv->regmap, reg, val);
+		if (!(*val & (MDIO_START | MDIO_BUSY)))
+			return 0;
+		udelay(10);
+	} while (--timeout);
+	return -ETIMEDOUT;
+}
+
+/* EMAC MDIO register access */
+static int edma_mdio_read(struct mii_bus *bus, int addr, int regnum)
+{
+	struct edma_priv *priv = bus->priv;
+	u32 reg, val;
+
+	regmap_write(priv->regmap, EMAC_PHY_STS,
+		     (addr << PHY_ADDR_SHFT) & PHY_ADDR_BMSK);
+
+	reg = SUP_PREAMBLE |
+	      ((MDIO_CLK_25_4 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
+	      ((regnum << MDIO_REG_ADDR_SHFT) & MDIO_REG_ADDR_BMSK) |
+	      MDIO_START | MDIO_RD_NWR;
+
+	regmap_write(priv->regmap, EMAC_MDIO_CTRL, reg);
+
+	if (edma_mdio_read_poll(priv, EMAC_MDIO_CTRL, &val))
+		return -EIO;
+
+	return (val >> MDIO_DATA_SHFT) & MDIO_DATA_BMSK;
+}
+
+static int edma_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
+{
+	struct edma_priv *priv = bus->priv;
+	u32 reg, val2;
+
+	regmap_write(priv->regmap, EMAC_PHY_STS,
+		     (addr << PHY_ADDR_SHFT) & PHY_ADDR_BMSK);
+
+	reg = SUP_PREAMBLE |
+	      ((MDIO_CLK_25_4 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
+	      ((regnum << MDIO_REG_ADDR_SHFT) & MDIO_REG_ADDR_BMSK) |
+	      ((val << MDIO_DATA_SHFT) & MDIO_DATA_BMSK) |
+	      MDIO_START;
+
+	regmap_write(priv->regmap, EMAC_MDIO_CTRL, reg);
+
+	if (edma_mdio_read_poll(priv, EMAC_MDIO_CTRL, &val2))
+		return -EIO;
+
+	return 0;
+}
+
+/* C45-over-C22: MMD register address is encoded as (devad << 16) | regnum */
+static int edma_mdio_c45_mmd_select(struct mii_bus *bus, int addr,
+				    int devad, int regnum)
+{
+	struct edma_priv *priv = bus->priv;
+	u32 reg, val;
+	u32 mmd_addr;
+	int ret;
+
+	if (addr < 0 || addr > 0x1f || devad > 0x1f || regnum > 0xffff)
+		return -EINVAL;
+
+	regmap_write(priv->regmap, EMAC_PHY_STS,
+		     (addr << PHY_ADDR_SHFT) & PHY_ADDR_BMSK);
+
+	mmd_addr = ((devad << 16) | regnum) & MDIO_DATA_BMSK;
+
+	/* Select MMD (write devad:regnum to register 0x0D) */
+	reg = SUP_PREAMBLE |
+		((MDIO_CLK_25_4 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
+		((MII_MMD_CTRL << MDIO_REG_ADDR_SHFT) & MDIO_REG_ADDR_BMSK) |
+		(mmd_addr << MDIO_DATA_SHFT) |
+		MDIO_START;
+
+	regmap_write(priv->regmap, EMAC_MDIO_CTRL, reg);
+
+	ret = edma_mdio_read_poll(priv, EMAC_MDIO_CTRL, &val);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int edma_mdio_read_c45(struct mii_bus *bus, int addr, int devad,
+			      int regnum)
+{
+	int ret;
+
+	ret = edma_mdio_c45_mmd_select(bus, addr, devad, regnum);
+	if (ret)
+		return ret;
+
+	return edma_mdio_read(bus, addr, MII_MMD_DATA);
+}
+
+static int edma_mdio_write_c45(struct mii_bus *bus, int addr, int devad,
+			       int regnum, u16 val)
+{
+	int ret;
+
+	ret = edma_mdio_c45_mmd_select(bus, addr, devad, regnum);
+	if (ret)
+		return ret;
+
+	return edma_mdio_write(bus, addr, MII_MMD_DATA, val);
+}
+
+static int edma_mdio_setup(struct edma_priv *priv)
+{
+	struct device *dev = &priv->pdev->dev;
+	struct mii_bus *mii_bus;
+	int ret;
+
+	mii_bus = devm_mdiobus_alloc(dev);
+	if (!mii_bus)
+		return -ENOMEM;
+
+	mii_bus->name = "emac-mdio";
+	snprintf(mii_bus->id, MII_BUS_ID_SIZE, "%s", dev_name(dev));
+	mii_bus->read = edma_mdio_read;
+	mii_bus->write = edma_mdio_write;
+	mii_bus->read_c45 = edma_mdio_read_c45;
+	mii_bus->write_c45 = edma_mdio_write_c45;
+	mii_bus->parent = dev;
+	mii_bus->priv = priv;
+	priv->mii_bus = mii_bus;
+
+	ret = of_mdiobus_register(mii_bus, dev->of_node);
+	if (ret) {
+		dev_err(dev, "could not register mdio bus\n");
+		return ret;
+	}
+
+	dev_info(dev, "registered EMAC internal MDIO bus with C45 support\n");
+
+	return 0;
+}
 
 static void edma_irq_disable_all(struct edma_priv *priv)
 {
@@ -1209,6 +1383,10 @@ static int edma_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_page_pool;
 
+	ret = edma_mdio_setup(priv);
+	if (ret)
+		dev_warn(dev, "could not setup internal MDIO bus: %d\n", ret);
+
 	SET_NETDEV_DEV(netdev, dev);
 	netdev->dev.of_node = dev->of_node;
 	netdev->netdev_ops = &edma_netdev_ops;
@@ -1249,6 +1427,8 @@ static int edma_probe(struct platform_device *pdev)
 err_irq:
 	netif_napi_del(&priv->tx_napi);
 	netif_napi_del(&priv->rx_napi);
+	if (priv->mii_bus)
+		mdiobus_unregister(priv->mii_bus);
 	edma_hw_stop(priv);
 	edma_rings_drain(priv);
 err_page_pool:
@@ -1261,6 +1441,8 @@ static void edma_remove(struct platform_device *pdev)
 	struct edma_priv *priv = platform_get_drvdata(pdev);
 
 	unregister_netdev(priv->netdev);
+	if (priv->mii_bus)
+		mdiobus_unregister(priv->mii_bus);
 	netif_napi_del(&priv->tx_napi);
 	netif_napi_del(&priv->rx_napi);
 	edma_hw_stop(priv);
