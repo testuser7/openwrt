@@ -80,6 +80,9 @@ static int edma_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	if (edma_mdio_read_poll(priv, EMAC_MDIO_CTRL, &val))
 		return -EIO;
 
+	pr_info("edma_mdio_read addr=%d reg=0x%04x val=0x%04x\n",
+		addr, regnum, (val >> MDIO_DATA_SHFT) & MDIO_DATA_BMSK);
+
 	return (val >> MDIO_DATA_SHFT) & MDIO_DATA_BMSK;
 }
 
@@ -195,20 +198,11 @@ static int edma_mdio_setup(struct edma_priv *priv)
 
 static void edma_fix_phy_interfaces(struct phy_device *phydev)
 {
-	u32 phy_id;
-	int i;
-
 	if (!phydev->is_c45)
 		return;
 
-	for (i = 0; i < MDIO_MMD_NUM; i++) {
-		phy_id = phydev->c45_ids.device_ids[i];
-		if (phy_id == 0x31c31c22) {
-			__set_bit(PHY_INTERFACE_MODE_USXGMII, phydev->possible_interfaces);
-			dev_info(&phydev->mdio.dev, "forced USXGMII into possible_interfaces\n");
-			return;
-		}
-	}
+	__set_bit(PHY_INTERFACE_MODE_USXGMII, phydev->possible_interfaces);
+	dev_info(&phydev->mdio.dev, "forced USXGMII into possible_interfaces\n");
 }
 
 static int edma_fixup_phy_interfaces(struct edma_priv *priv)
@@ -216,11 +210,17 @@ static int edma_fixup_phy_interfaces(struct edma_priv *priv)
 	struct mii_bus *bus = priv->mii_bus;
 	int addr;
 
+	dev_info(priv->pdev ? &priv->pdev->dev : NULL,
+		 "fixup: scanning PHYs on bus %s\n", bus->id);
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
 		struct phy_device *phydev = mdiobus_get_phy(bus, addr);
 
-		if (phydev)
+		if (phydev) {
+			dev_info(&phydev->mdio.dev,
+				 "fixup: phy addr=%d id=0x%08x is_c45=%d\n",
+				 addr, phydev->phy_id, phydev->is_c45);
 			edma_fix_phy_interfaces(phydev);
+		}
 	}
 
 	return 0;
@@ -1370,6 +1370,7 @@ static int edma_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	void __iomem *base;
 	int ret;
+	int addr;
 
 	ret = devm_clk_bulk_get_all_enabled(dev, &clks);
 	if (ret < 0)
@@ -1420,11 +1421,13 @@ static int edma_probe(struct platform_device *pdev)
 	if (ret)
 		dev_warn(dev, "could not setup internal MDIO bus: %d\n", ret);
 
-	ret = edma_fixup_phy_interfaces(priv);
-	if (ret)
-		dev_warn(dev, "could not fixup phy interfaces: %d\n", ret);
+ 	ret = edma_fixup_phy_interfaces(priv);
+ 	if (ret)
+ 		dev_warn(dev, "could not fixup phy interfaces: %d\n", ret);
 
-	SET_NETDEV_DEV(netdev, dev);
+ 	dev_info(dev, "edma_fixup_phy_interfaces done\n");
+ 
+ 	SET_NETDEV_DEV(netdev, dev);
 	netdev->dev.of_node = dev->of_node;
 	netdev->netdev_ops = &edma_netdev_ops;
 	netdev->features = NETIF_F_GRO;
@@ -1445,14 +1448,24 @@ static int edma_probe(struct platform_device *pdev)
 
 	ret = register_netdev(netdev);
 	if (ret) {
-		dev_warn(dev, "failed to register conduit netdevice\n");
+ 		dev_warn(dev, "failed to register conduit netdevice\n");
 		goto err_irq;
-	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
-	ret = dev_set_threaded(netdev, NETDEV_NAPI_THREADED_ENABLED);
-#else
-	ret = dev_set_threaded(netdev, true);
+ 	}
+ 
+	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
+ 		struct phy_device *phydev = mdiobus_get_phy(priv->mii_bus, addr);
+ 
+ 		if (phydev)
+ 			dev_info(&phydev->mdio.dev,
+				 "final: addr=%d id=0x%08x possible_ifaces=%*pbl\n",
+ 				 addr, phydev->phy_id,
+ 				 PHY_INTERFACE_MODE_MAX,
+ 				 phydev->possible_interfaces);
+ 	}
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+ 	ret = dev_set_threaded(netdev, NETDEV_NAPI_THREADED_ENABLED);
+ #else
+ 	ret = dev_set_threaded(netdev, true);
 #endif
 	if (ret)
 		dev_warn(dev, "failed to enable threaded NAPI: %d\n", ret);

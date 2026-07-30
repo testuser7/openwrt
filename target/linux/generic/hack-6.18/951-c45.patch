@@ -1,5 +1,5 @@
 diff --git a/drivers/net/mdio/fwnode_mdio.c b/drivers/net/mdio/fwnode_mdio.c
-index 285d8fc61..bc6ccafcd 100644
+index 285d8fc61..b8dbca209 100644
 --- a/drivers/net/mdio/fwnode_mdio.c
 +++ b/drivers/net/mdio/fwnode_mdio.c
 @@ -9,6 +9,7 @@
@@ -10,7 +10,7 @@ index 285d8fc61..bc6ccafcd 100644
  #include <linux/of.h>
  #include <linux/phy.h>
  
-@@ -16,6 +17,42 @@ MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
+@@ -16,6 +17,55 @@ MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
  MODULE_LICENSE("GPL");
  MODULE_DESCRIPTION("FWNODE MDIO bus (Ethernet PHY) accessors");
  
@@ -30,14 +30,27 @@ index 285d8fc61..bc6ccafcd 100644
 +	u32 deassert_delay_us = 0;
 +	int ret;
 +
++	pr_info( "pre_deassert: looking up reset GPIO for %pfw\n", child);
++
 +	gpiod = fwnode_gpiod_get_index(child, "reset", 0,
-+				       GPIOD_OUT_LOW, "PHY reset");
-+	if (IS_ERR(gpiod))
++				       GPIOD_OUT_HIGH, "PHY reset");
++	if (IS_ERR(gpiod)) {
++		pr_info( "pre_deassert: no reset GPIO (err=%ld)\n",
++			 PTR_ERR(gpiod));
 +		return 0;
++	}
++
++	pr_info( "pre_deassert: got reset GPIO descriptor\n");
 +
 +	ret = gpiod_set_value_cansleep(gpiod, 1);
++	pr_info( "pre_deassert: gpiod_set_value_cansleep(1) returned %d\n",
++		 ret);
++
 +	if (ret)
 +		return ret;
++
++	ret = gpiod_get_value_cansleep(gpiod);
++	pr_info( "pre_deassert: GPIO read-back value=%d\n", ret);
 +
 +	ret = fwnode_property_read_u32(child, "reset-deassert-us",
 +				       &deassert_delay_us);
@@ -53,7 +66,7 @@ index 285d8fc61..bc6ccafcd 100644
  static struct mii_timestamper *
  fwnode_find_mii_timestamper(struct fwnode_handle *fwnode)
  {
-@@ -106,6 +143,8 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
+@@ -106,6 +156,8 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
  	u32 phy_id;
  	int rc;
  
@@ -72,13 +85,28 @@ index 435424113..2755ef389 100644
  						 "reset", GPIOD_OUT_LOW);
 -	if (IS_ERR(mdiodev->reset_gpio))
 -		return PTR_ERR(mdiodev->reset_gpio);
-+ 	if (IS_ERR(mdiodev->reset_gpio)) {
++	if (IS_ERR(mdiodev->reset_gpio)) {
 +		if (PTR_ERR(mdiodev->reset_gpio) == -EBUSY) {
 +			mdiodev->reset_gpio = NULL;
 +			return 0;
 +		}
-+ 		return PTR_ERR(mdiodev->reset_gpio);
++		return PTR_ERR(mdiodev->reset_gpio);
 +	}
  
  	if (mdiodev->reset_gpio)
  		gpiod_set_consumer_name(mdiodev->reset_gpio, "PHY reset");
+diff --git a/drivers/net/phy/phy_device.c b/drivers/net/phy/phy_device.c
+index 26b08e3db..cbfa8e51d 100644
+--- a/drivers/net/phy/phy_device.c
++++ b/drivers/net/phy/phy_device.c
+@@ -1539,7 +1539,8 @@ int phy_init_hw(struct phy_device *phydev)
+ 	ret = phy_scan_fixups(phydev);
+ 	if (ret < 0)
+ 		return ret;
+ 
+-	phy_interface_zero(phydev->possible_interfaces);
++	if (phy_interface_empty(phydev->possible_interfaces))
++		phy_interface_zero(phydev->possible_interfaces);
+ 
+ 	if (phydev->drv->config_init) {
+ 		ret = phydev->drv->config_init(phydev);
