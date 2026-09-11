@@ -113,7 +113,7 @@ jobs:
         run: make CCACHE_DIR=${{ env.CCACHE_DIR }} -j$(($(nproc)+1)) world
 
       - name: Build smartdns
-        if: (success() || failure()) && steps.firmware-images.outcome == 'failure'
+        #if: (success() || failure()) && steps.firmware-images.outcome == 'failure'
         run: |
           make -j1 V=sc package/smartdns/clean
           make -j1 V=sc package/smartdns/compile
