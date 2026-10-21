@@ -1,0 +1,13 @@
+--- a/iwinfo_nl80211.c
++++ b/iwinfo_nl80211.c
+@@ -2578,7 +2578,9 @@ static int nl80211_get_txpwrlist_cb(stru
+ 			ch_cmp = nl80211_freq2channel(freq_cmp);
+ 
+ 			if ((freq_cur && freq_cmp == freq_cur) ||
+-			    (!freq_cur && (!ch_cur || ch_cmp == ch_cur)))
++			    (!freq_cur && txpwrlist->dbm_max < 0 &&
++			     !freqs[NL80211_FREQUENCY_ATTR_DISABLED] &&
++			     (!ch_cur || ch_cmp == ch_cur)))
+ 			{
+ 				txpwrlist->dbm_max = nla_get_u32(
+ 					freqs[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) / 100;
